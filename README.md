@@ -68,11 +68,35 @@ A set of 33 role cards for one-person companies (OPC): QA, design, engineering, 
 
 Claude Code：安装后在对话里直接点名，例如“用 qa-permission-tester 按项目档案跑一遍权限矩阵”，也可以让主对话按 description 自动派发。
 
-Codex 或其他代理：构建后每个角色有一份完整的 Markdown（`dist/markdown/<name>.md`，已附共用边界）。在项目的 `AGENTS.md` 里写一句：
+Codex、Antigravity 或其他代理：构建后每个角色有一份完整的 Markdown（`dist/markdown/<name>.md`，已附共用边界）。在项目的 `AGENTS.md` 里写一句：
 
 ```
 需要质量检查时，按 <本仓库路径>/dist/markdown/qa-permission-tester.md 执行，先读项目根目录的 project-profile.md。
 ```
+
+## 自动化辅助工具
+
+仓库内置轻量级调度辅助工具 `scripts/runner.py`（无第三方依赖）：
+
+1. **按编排生成计划**：
+   ```bash
+   python3 scripts/runner.py plan pre-release --out run-plan.md
+   python3 scripts/runner.py plan pre-release --reports ./reports   # 带出上次分诊单的 P0/P1
+   ```
+2. **按改动文件智能推荐岗位**：
+   ```bash
+   python3 scripts/runner.py suggest src/auth/guard.ts src/billing/pricing.vue
+   git diff --name-only | python3 scripts/runner.py suggest -
+   ```
+3. **多岗位报告汇总与分诊**：
+   ```bash
+   python3 scripts/runner.py triage ./reports --out triage-summary.md
+   python3 scripts/runner.py triage ./reports --archive ./reports   # 写为 triage-YYYYMMDD.md，同日不覆盖
+   ```
+
+## 开源工具与系统生态
+
+部分角色可以搭配本机命令行工具取得第一手证据，多数角色一个，并标明数据是否出本机，详见 [可选开源工具](docs/ecosystem.md)：Gitleaks、Semgrep、Playwright、axe-core、Lighthouse、Vale、ScanCode Toolkit。
 
 ## 编排
 
@@ -86,6 +110,7 @@ Codex 或其他代理：构建后每个角色有一份完整的 Markdown（`dist
 | [季度经营评审](playbooks/quarterly-business.md) | 每季度决定继续、调整或停止 |
 | [新客户接入受阻](playbooks/onboarding-blocked.md) | 客户卡在接入的某一步 |
 | [事故复盘](playbooks/incident-review.md) | P0 问题或回滚之后 |
+| [小程序提审上架](playbooks/miniprogram-review.md) | 小程序首次提审、含新类目或收费入口的版本、被驳回后重提 |
 
 ## 安全边界
 
@@ -106,7 +131,9 @@ playbooks/                  运行编排
 templates/report.md         岗位报告模板（P0 至 P3 分级）
 templates/run-plan.md       一次运行的计划模板
 project-profile.template.md 项目档案模板
+docs/ecosystem.md           可选开源工具
 scripts/build.py            生成 dist/
+scripts/runner.py           自动化编排与派工辅助工具
 scripts/check.py            校验角色卡、编排、禁词与链接
 tests/test_build.py         构建与校验的测试
 ```

@@ -32,6 +32,7 @@ handoff: architect-reviewer, code-reviewer, release-sre
 - 构建产物的包体报告与分包配置。
 - 接口耗时统计或访问日志的聚合数据（不含个人信息）。
 - 平台对包体、启动时间的限制说明。
+- 可选用开源工具辅助测量：Web 端可用 lighthouse 收集指标。
 
 ## 工作步骤
 

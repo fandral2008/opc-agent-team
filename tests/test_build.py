@@ -1,5 +1,8 @@
+import contextlib
 import hashlib
-import shutil
+import io
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -9,6 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import build as build_mod  # noqa: E402
 import check as check_mod  # noqa: E402
+import runner as runner_mod  # noqa: E402
 
 
 def digest_tree(base):
@@ -56,6 +60,11 @@ class BuildTests(unittest.TestCase):
             keys = {ln.split(":")[0] for ln in head.strip().split("\n")}
             self.assertTrue(keys <= {"name", "description", "tools", "model"})
 
+    def test_no_antigravity_output(self):
+        with tempfile.TemporaryDirectory() as t:
+            build_mod.build(ROOT, Path(t) / "dist")
+            self.assertFalse((Path(t) / "dist" / "antigravity").exists())
+
     def test_shared_appended(self):
         with tempfile.TemporaryDirectory() as t:
             build_mod.build(ROOT, Path(t) / "dist")
@@ -66,9 +75,9 @@ class BuildTests(unittest.TestCase):
 
 class CheckTests(unittest.TestCase):
     def test_real_repo_passes(self):
-        errors, nr, npb = check_mod.check(ROOT, 33, 6)
+        errors, nr, npb = check_mod.check(ROOT, 33, 7)
         self.assertEqual(errors, [])
-        self.assertEqual((nr, npb), (33, 6))
+        self.assertEqual((nr, npb), (33, 7))
 
     def test_good_synthetic_card_passes(self):
         with tempfile.TemporaryDirectory() as t:
@@ -111,6 +120,143 @@ class CheckTests(unittest.TestCase):
             make_repo(t, "\n".join(good_card().split("\n")[:30]) + "\n")
             errors, _, _ = check_mod.check(t)
             self.assertTrue(any("行数" in e for e in errors), errors)
+
+
+class RunnerTests(unittest.TestCase):
+    def test_generate_run_plan(self):
+        plan_text = runner_mod.generate_run_plan(ROOT / "playbooks" / "pre-release.md")
+        self.assertIn("运行计划", plan_text)
+        self.assertIn("chief-of-staff", plan_text)
+        self.assertIn("可并行组", plan_text)
+
+    def test_suggest_roles(self):
+        files = ["src/auth/token.ts", "src/billing/pricing.vue", "deploy/docker-compose.yml"]
+        suggestions = runner_mod.suggest_roles(files)
+        roles = {s["role"] for s in suggestions}
+        self.assertIn("security-reviewer", roles)
+        self.assertIn("qa-permission-tester", roles)
+        self.assertIn("finance-pricing", roles)
+        self.assertIn("release-sre", roles)
+
+    def suggested(self, *files):
+        return {s["role"] for s in runner_mod.suggest_roles(list(files))}
+
+    def test_suggest_no_substring_false_positives(self):
+        self.assertEqual(self.suggested("scripts/build.py", "src/api/endpoint.ts", "src/guide.md"), set())
+        self.assertEqual(self.suggested("src/user/border.css"), {"visual-design-reviewer"})
+        self.assertEqual(self.suggested("Dockerfile"), {"release-sre"})
+
+    def test_suggest_miniprogram_and_camel_case(self):
+        roles = self.suggested("pages/index/index.wxml")
+        self.assertIn("interaction-designer", roles)
+        self.assertIn("qa-cross-platform", self.suggested("app.json"))
+        self.assertIn("security-reviewer", self.suggested("src/AuthGuard.ts"))
+        self.assertIn("release-sre", self.suggested(".github/workflows/test.yml"))
+
+    def test_suggest_style_files_only_visual(self):
+        for f in ("src/styles/theme.css", "pages/index/index.wxss", "src/app.scss"):
+            self.assertEqual(self.suggested(f), {"visual-design-reviewer"}, f)
+
+    def test_suggest_reads_stdin(self):
+        proc = subprocess.run([sys.executable, str(ROOT / "scripts" / "runner.py"), "suggest", "-"],
+                              input="src/auth/token.ts\nscripts/build.py\n",
+                              capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("security-reviewer", proc.stdout)
+        self.assertNotIn("release-sre", proc.stdout)
+
+    def write_report(self, d, name, body):
+        (Path(d) / name).write_text(body, encoding="utf-8")
+
+    def test_generate_triage(self):
+        with tempfile.TemporaryDirectory() as t:
+            self.write_report(t, "security-reviewer.md", "\n".join([
+                "# 岗位报告：security-reviewer",
+                "",
+                "### SEC-001 存在越权漏洞",
+                "- 级别：P0",
+                "- 证据：src/auth/guard.ts:42",
+                "- 建议：增加租户归属校验",
+            ]))
+            triage_text = runner_mod.generate_triage(t)
+            self.assertIn("多岗位分诊汇总单", triage_text)
+            self.assertIn("SEC-001", triage_text)
+            self.assertIn("阻断", triage_text)
+
+    def test_triage_dated_filename_role_and_unknown(self):
+        with tempfile.TemporaryDirectory() as t:
+            body = "### A-1 标题\n- 级别：P1\n"
+            self.write_report(t, "security-reviewer-2026-10-22.md", body)
+            self.write_report(t, "mystery-note.md", body)
+            text = runner_mod.generate_triage(t)
+            self.assertIn("`security-reviewer`", text)
+            self.assertIn("`未识别`", text)
+            self.assertIn("mystery-note.md", text)
+
+    def test_triage_missing_level_not_p2(self):
+        with tempfile.TemporaryDirectory() as t:
+            self.write_report(t, "code-reviewer.md",
+                              "### C-1 无级别\n- 证据：x\n\n### C-2 多选\n- 级别：P0 / P1\n")
+            text = runner_mod.generate_triage(t)
+            self.assertIn("缺级别", text)
+            self.assertIn("缺级别: 2", text)
+            self.assertIn("阻断", text)
+            self.assertNotIn("一般与打磨项（P2 / P3）\n\n| ", text)
+
+    def test_triage_pipe_escape_and_two_columns(self):
+        with tempfile.TemporaryDirectory() as t:
+            self.write_report(t, "code-reviewer.md",
+                              "### C-1 标题含 a|b\n- 级别：P1\n- 建议：改 x|y\n- 建议去向：缺陷\n")
+            text = runner_mod.generate_triage(t)
+            self.assertIn("a\\|b", text)
+            self.assertIn("| 建议 | 建议去向 |", text)
+            row = next(ln for ln in text.splitlines() if ln.startswith("| P1"))
+            self.assertIn("改 x\\|y | 缺陷", row)
+
+    def test_plan_runs_from_any_directory(self):
+        old = os.getcwd()
+        with tempfile.TemporaryDirectory() as t:
+            os.chdir(t)
+            try:
+                out = io.StringIO()
+                saved, sys.stdout = sys.stdout, out
+                try:
+                    code = runner_mod.main(["plan", "pre-release"])
+                finally:
+                    sys.stdout = saved
+            finally:
+                os.chdir(old)
+        self.assertEqual(code, 0)
+        self.assertIn("运行计划", out.getvalue())
+
+    def test_plan_unknown_name_fails(self):
+        proc = subprocess.run([sys.executable, str(ROOT / "scripts" / "runner.py"), "plan", "no-such"],
+                              capture_output=True, text=True)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("pre-release", proc.stderr)
+
+    def test_plan_with_reports_brings_previous_p0(self):
+        with tempfile.TemporaryDirectory() as t:
+            self.write_report(t, "security-reviewer.md", "### SEC-9 旧越权\n- 级别：P0\n")
+            (Path(t) / "triage-20261001.md").write_text(runner_mod.generate_triage(t), encoding="utf-8")
+            plan = runner_mod.generate_run_plan(ROOT / "playbooks" / "pre-release.md", reports_dir=t)
+            self.assertIn("上次 P0/P1，开工前逐条核对是否已关闭", plan)
+            self.assertIn("SEC-9", plan)
+        with tempfile.TemporaryDirectory() as t:
+            plan = runner_mod.generate_run_plan(ROOT / "playbooks" / "pre-release.md", reports_dir=t)
+            self.assertIn("无上次分诊单", plan)
+
+    def test_triage_archive_does_not_overwrite(self):
+        with tempfile.TemporaryDirectory() as t, tempfile.TemporaryDirectory() as a:
+            self.write_report(t, "code-reviewer.md", "### C-1 x\n- 级别：P2\n")
+            for _ in range(3):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    runner_mod.main(["triage", t, "--archive", a])
+            names = sorted(p.name for p in Path(a).iterdir())
+            self.assertEqual(len(names), 3)
+            self.assertTrue(names[0].startswith("triage-") and names[0].endswith(".md"))
+            self.assertTrue(any(n.endswith("-2.md") for n in names))
+            self.assertTrue(any(n.endswith("-3.md") for n in names))
 
 
 if __name__ == "__main__":

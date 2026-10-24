@@ -32,6 +32,7 @@ handoff: code-reviewer, qa-cross-platform, product-manager
 - 上次走查的步数与耗时基线。
 - 提案里的验收标准。
 - 需要人扫码登录的环节，先确认登录态可用，不可用就停下。
+- 可选用开源工具辅助走查：如使用 playwright 执行自动化端到端脚本。
 
 ## 工作步骤
 

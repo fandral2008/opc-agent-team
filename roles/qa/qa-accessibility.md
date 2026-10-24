@@ -32,6 +32,7 @@ handoff: visual-design-reviewer, interaction-designer, qa-edge-case-breaker
 - 页面清单与核心任务清单。
 - 上次可访问性报告的遗留项。
 - 平台的无障碍和适老化指引，保存访问日期。
+- 可选用开源工具辅助初筛：如使用 axe-core 自动提取对比度与标签可疑项。
 
 ## 工作步骤
 
