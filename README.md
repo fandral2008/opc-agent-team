@@ -1,3 +1,5 @@
+[English](README.en.md) | 中文
+
 # opc-agent-team
 
 A set of 33 role cards for one-person companies (OPC): QA, design, engineering, growth, customer success, executive review, risk control and market insight, written as AI agent prompts. Each card runs as a Claude Code subagent or can be handed to Codex or any agent that reads Markdown. Cards are generic; everything project-specific lives in your own `project-profile.md`. Default posture is read-only, test accounts and fake data only.
