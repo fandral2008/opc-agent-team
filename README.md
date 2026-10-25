@@ -161,6 +161,10 @@ python3 scripts/build.py
 - [Midscene.js](https://github.com/web-infra-dev/midscene)：用自然语言驱动界面操作与验证的思路，用于真实界面上的走查。
 - [UXAgent](https://arxiv.org/abs/2504.09407)：用模拟用户做可用性测试的方法，以及它只能产生待验证假设的局限。
 
+## 联系与合作
+
+想让角色团适配你的项目，或需要一对一搭建，欢迎在 X 私信：[@Fandral2008](https://x.com/Fandral2008)。
+
 ## 许可
 
 MIT，见 `LICENSE`。

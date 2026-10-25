@@ -159,6 +159,10 @@ python3 scripts/build.py
 - [Midscene.js](https://github.com/web-infra-dev/midscene): the idea of driving and verifying a UI in natural language, used here for walkthroughs on the real interface.
 - [UXAgent](https://arxiv.org/abs/2504.09407): the method of usability testing with simulated users, and its limit that it can only produce hypotheses to be validated.
 
+## Contact
+
+If you want the role team adapted to your project or set up one-on-one, send a DM on X: [@Fandral2008](https://x.com/Fandral2008).
+
 ## License
 
 MIT; see `LICENSE`.
